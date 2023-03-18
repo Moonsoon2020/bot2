@@ -59,7 +59,7 @@ def createBD():  # инициализация класса
 
 def get_answer(key_words):
     con = sqlite3.connect('database.db', check_same_thread=False)
-    return con.cursor().execute(f'''SELECT answer FROM question_answer WHERE {key_words.capitalize()}''').fetchone()
+    return con.cursor().execute(f'''SELECT answer FROM question_answer WHERE key_words = "{key_words.capitalize()}"''').fetchall()
 
 
 def add_que_ans(question, answer):
@@ -92,10 +92,10 @@ def get_category_assort(id_category):
           FROM assortment WHERE category = "{id_category}"''').fetchall()
 
 
-def add_category(name, http):
+def add_category(name):
     con = sqlite3.connect('database.db', check_same_thread=False)
-    con.cursor().execute(f'''INSERT INTO category(name, http)
-                         VALUES('{name}', '{http}')''')
+    con.cursor().execute(f'''INSERT INTO category(name)
+                         VALUES('{name}')''')
     con.commit()
 
 
@@ -223,9 +223,13 @@ def get_info_for_base():
         ('ID', 'ФИО', 'Должность(1-админ, 0-клиент', 'ID TG', 'UserName')] + con.cursor().execute(f'''SELECT id, name, 
             status, id_tg, username FROM Users''').fetchall()
     itog.append(users)
+    ssort = 'Асортимент', [
+        ('ID', 'Название', 'Ссылка', 'Описание', 'Категория')] + \
+               con.cursor().execute(f'''SELECT * FROM assortment''').fetchall()
+    itog.append(ssort)
     categories = 'Категории', [
-        ('ID Категории', 'Название категории', 'Путь к файлу картинки')] + \
-                 con.cursor().execute(f'''SELECT id, name, http FROM category''').fetchall()
+        ('ID Категории', 'Название категории')] + \
+                 con.cursor().execute(f'''SELECT id, name FROM category''').fetchall()
     itog.append(categories)
     mailings = 'Уведомления', [
         ('Сообщение', 'Дата отправления')] + \
@@ -252,25 +256,35 @@ def get_info_for_base():
 
 
 def dow_remove_for_tg(format):
-    if format:
+    if format == 1:
         del_all()
+        print('delete')
     df = pd.read_excel(io='dow.xlsx', sheet_name=0)
     book = df.head(10000).values
     for lis in book:
         add_user(int(lis[3]), lis[1], lis[4])
         if lis[2]:
             remove_status(int(lis[3]))
+    df = pd.read_excel(io='dow.xlsx', sheet_name=2)
+    book = df.head(10000).values
+    print(book)
+    for lis in book:
+        add_category(lis[1])
     df = pd.read_excel(io='dow.xlsx', sheet_name=1)
     book = df.head(10000).values
+    print(book)
     for lis in book:
-        add_category(lis[1], lis[2])
-    df = pd.read_excel(io='dow.xlsx', sheet_name=2)
+        add_assort(lis[1], lis[2], lis[3], int(lis[4]))
+
+    df = pd.read_excel(io='dow.xlsx', sheet_name=3)
     book = df.head(10000).values
     for lis in book:
         add_notification(lis[0], lis[1])
+    df = pd.read_excel(io='dow.xlsx', sheet_name=4)
     book = df.head(10000).values
     for lis in book:
         add_que_ans(lis[0], lis[1])
+    df = pd.read_excel(io='dow.xlsx', sheet_name=5)
     book = df.head(10000).values
     for lis in book:
         add_discount(lis[0], lis[1])

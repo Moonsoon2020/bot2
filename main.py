@@ -3,7 +3,7 @@ import logging
 import threading
 
 import schedule as schedule
-from telegram import ForceReply, Update
+from telegram import ForceReply, Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ConversationHandler
 from for_db import *
 from geocod import *
@@ -16,7 +16,8 @@ logging.basicConfig(filename='logging.log',
 
 logger = logging.getLogger(__name__)
 
-TOKEN = "5342995443:AAEBqyRLrd5AmHEEhCNLyfHVy3td3Qvw-Ec"
+TOKEN = "6189612026:AAGu8wUuvcjZrPrk5baN4_WOgSq6ABBAQcU"
+MARKUP = None
 
 
 # Define a few command handlers. These usually take the two arguments update and
@@ -30,27 +31,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         rf"Hi {user.mention_html()}!",
         reply_markup=ForceReply(selective=True),
     )
-    help_command(update, context)
 
+def build_menu(buttons, n_cols,
+               header_buttons=None,
+               footer_buttons=None):
+    menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
+    if header_buttons:
+        menu.insert(0, [header_buttons])
+    if footer_buttons:
+        menu.append([footer_buttons])
+    return menu
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправит список команд, когда будет выдана команда /help."""
-    if is_status(update.message.chat_id):
 
+    if is_status(update.message.chat_id):
+        reply_keyboard = [['/catalog',
+                           '/doc_post'],
+                          ['/send_message',
+                           '/stop'],
+                          ['/help']]
         await update.message.reply_text('Команды: \n/catalog - показывает каталог товаров магазина\n/document\n'
-                                        '/doc_post\n'
-                                        '/send_message\n'
-                                        '/stop\n')
+                                        '/doc_post - загрузка файла Базы данных. \n'
+                                        '/send_message - отправка уведомлений пользователям\n'
+                                        '/stop - остановка сложных процессов\n',
+                                        reply_markup=reply_keyboard)
     else:
+        reply_keyboard = [['/catalog', '/contacts'], ['/joining_the_club', '/club_of_privileges'],
+                          ['/work_schedule', '/geo', '/help']]
         await update.message.reply_text('Команды: \n'
-                                        '/catalog - показывает каталог товаров магазина\n'
-                                        '/club_of_privileges\n'
-                                        '/joining_the_club\n'
-                                        '/geo\n'
-                                        '/administrator\n'
-                                        '/contacts\n'
-                                        '/statys\n'
-                                        '/stop\n')
+                                        '/contacts - Наши соц сети и сайт 🌐\n'
+                                        '/joining_the_club - Клуб Привилегий ⭐\n'
+                                        '/club_of_privileges - Преимущества участников  Клуба Привилегий ⭐\n'
+                                        '/work_schedule - Режим работы ⏰\n'
+                                        '/geo - Адреса наших магазинов 🗺\n'
+                                        '/admin - Контакты администратора 📞\n'
+                                        '/catalog - Каталог товаров 💄\n'
+                                        '/help - Список всех команд\n',
+                                        reply_markup=reply_keyboard)
 
 
 async def document_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -64,8 +82,9 @@ async def document_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Повторите сообщение пользователя."""
-    print(update.message.chat_id)
-    await update.message.reply_text(update.message.text)
+    answer = get_answer(update.message.text)
+    print(answer)
+    await update.message.reply_text('Пожалуйста, переформулируйте вопрос.' if len(answer) == 0 else answer[0][0])
 
 
 async def doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,9 +121,10 @@ async def check_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-async def remove_bzd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def remove_bzd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dow_remove_for_tg(update.message.text)
     await update.message.reply_text('несены изменения')
+    return ConversationHandler.END
 
 
 async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -233,18 +253,19 @@ def send_message(flag, text=''):
             [str(datetime.date.today().year), str(datetime.date.today().month), str(datetime.date.today().day)])
         print(today)
         text = [i[1] for i in get_notification() if i[2] == today]
+        text = '\n'.join(text)
         print(text)
     for i in get_no_admin_id():
-        sendMessage(i, '\n'.join(text), TOKEN)
+        sendMessage(i, text, TOKEN)
 
 
 async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Связь с админимтратором, когда будет выдана команда /admin."""
-    if update.message.text == 'Сейчас':
-        send_message(True, text=context.user_data['0'])
-    print(context.user_data['0'])
-
-    await update.message.reply_text('')
+    if update.message.text == 'сейчас':
+        send_message(False, text=context.user_data['0'])
+    else:
+        add_notification(context.user_data['0'], update.message.text)
+    await update.message.reply_text('Успешно!')
     return ConversationHandler.END
 
 
@@ -300,7 +321,7 @@ def main() -> None:
     )
     # по разным командам - отвечайте в Telegram
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("statys", statys))
+    application.add_handler(CommandHandler("status", statys))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("contacts", contacts_command))
     application.add_handler(CommandHandler("administrator", admin_command))
@@ -315,7 +336,6 @@ def main() -> None:
     # по некомандному, то есть сообщению - повторить сообщение в Telegram
     createBD()
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-
     # Запускайте бота до тех пор, пока пользователь не нажмет Ctrl-C
     application.run_polling()
 
